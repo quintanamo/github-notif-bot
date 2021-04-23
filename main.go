@@ -7,8 +7,33 @@ import (
 	"encoding/json"
     "io/ioutil"
 	"syscall"
+	"net/http"
 	"github.com/bwmarrin/discordgo"
 )
+
+type Issue struct {
+	IssueNum string
+	Cction string
+	Title string
+	Actor string
+	Url string
+}
+
+func WatchRepoIssues(url string) {
+	response, err := http.Get(url)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer response.Body.Close()
+	bodyBytes, _ := ioutil.ReadAll(response.Body)
+	var events []map[string]interface{}
+	json.Unmarshal([]byte(bodyBytes), &events)
+	issue := Issue{
+		action: events[0]["event"].(string)
+	}
+	fmt.Println(events[0]["event"].(string))
+}
 
 func main() {
 	// open config file
@@ -39,6 +64,9 @@ func main() {
 		return
 	}
 
+	go WatchRepoIssues("https://api.github.com/repos/YCPRadioTelescope/Radio-Tele-Frontend/issues/events")
+
+	//c := make(chan string)
 	//discord.ChannelMessageSend("835167014720897064", "Hello!")
 
 	// Wait here until CTRL-C or other term signal is received.
