@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"os"
 	"os/signal"
 	"encoding/json"
@@ -12,28 +13,49 @@ import (
 )
 
 type Issue struct {
-	IssueNum string
-	Cction string
+	IssueNum int
+	Action string
 	Title string
 	Actor string
 	Url string
 }
 
-func WatchRepoIssues(url string) {
-	response, err := http.Get(url)
-	if err != nil {
-		fmt.Println(err)
-		return
+func WatchRepoIssues(url string, channelID string) {
+	for {
+		// get issue events from GitHub
+		response, err := http.Get(url)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		defer response.Body.Close()
+
+		// read bytes from response and deserialize JSON
+		bodyBytes, _ := ioutil.ReadAll(response.Body)
+		var events []map[string]interface{}
+		json.Unmarshal([]byte(bodyBytes), &events)
+
+		// store result in an Issue
+		issue := Issue {}
+		issue.IssueNum 	= int(events[0]["issue"].(map[string]interface{})["number"].(float64))
+		issue.Action 	= events[0]["event"].(string)
+		issue.Title 	= events[0]["issue"].(map[string]interface{})["title"].(string)
+		issue.Actor 	= events[0]["actor"].(map[string]interface{})["login"].(string)
+		issue.Url	 	= events[0]["issue"].(map[string]interface{})["html_url"].(string)
+
+		// build message string
+		message := "Issue #" + strconv.Itoa(issue.IssueNum) + " - " + issue.Title + "\n" + "Action: " + issue.Action + " by " + issue.Actor + "\n" + issue.Url
+
+		// output the message in the specified channel
+		SendDiscordMessage(channelID, message)
 	}
-	defer response.Body.Close()
-	bodyBytes, _ := ioutil.ReadAll(response.Body)
-	var events []map[string]interface{}
-	json.Unmarshal([]byte(bodyBytes), &events)
-	issue := Issue{
-		action: events[0]["event"].(string)
-	}
-	fmt.Println(events[0]["event"].(string))
 }
+
+func SendDiscordMessage(channelID string, message string) {
+	discord.ChannelMessageSend(channelID, message)
+}
+
+var discord *discordgo.Session = new(discordgo.Session)
 
 func main() {
 	// open config file
@@ -52,7 +74,7 @@ func main() {
 	fmt.Println("\033[32mSuccessfully loaded config values!\033[0m")
 
 	// start running the bot
-	discord, err := discordgo.New("Bot " + auth_token)
+	discord, err = discordgo.New("Bot " + auth_token)
 	if err != nil {
 		fmt.Println("Error initializing bot.")
 		return
@@ -64,10 +86,7 @@ func main() {
 		return
 	}
 
-	go WatchRepoIssues("https://api.github.com/repos/YCPRadioTelescope/Radio-Tele-Frontend/issues/events")
-
-	//c := make(chan string)
-	//discord.ChannelMessageSend("835167014720897064", "Hello!")
+	go WatchRepoIssues("https://api.github.com/repos/YCPRadioTelescope/Radio-Tele-Frontend/issues/events", "835167014720897064")
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
